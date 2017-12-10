@@ -32,7 +32,7 @@ type state struct {
 // Discord holds the bot
 type Discord struct {
 	Session *discordgo.Session
-	users   map[string]user
+	users   map[string]*user
 	states  map[string]*state
 }
 
@@ -93,7 +93,7 @@ func (d *Discord) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate
 	u, ok := d.users[userID]
 	if !ok {
 		log.Debug("We don't know ", userID)
-		u = user{}
+		u = &user{}
 		d.users[userID] = u
 		d.states[userID] = &state{
 			password: "",
@@ -119,12 +119,16 @@ func (d *Discord) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate
 		}
 	case GOT_KEY:
 		{
+			key := m.Content
+			d.users[userID].key = key
 			d.states[userID].next = GOT_SECRET
 			s.ChannelMessageSend(m.ChannelID, "Please provide your Bittrex secret")
 			return
 		}
 	case GOT_SECRET:
 		{
+			secret := m.Content
+			d.users[userID].secret = secret
 			s.ChannelMessageSend(m.ChannelID, "Your details have been saved")
 			s.ChannelMessageSend(m.ChannelID, "Yoy will be asked for your password everytime the server restarts")
 			s.ChannelMessageSend(m.ChannelID, "Order notification has been started")
@@ -147,7 +151,7 @@ func NewDiscord(token string) *Discord {
 
 	return &Discord{
 		Session: s,
-		users:   map[string]user{},
+		users:   map[string]*user{},
 		states:  map[string]*state{},
 	}
 }
