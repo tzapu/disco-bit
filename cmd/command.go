@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -16,7 +18,6 @@ var aCmd = &cobra.Command{
 	Long:  "a example command",
 	Args:  cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		log.Debug("Global flag", cfgFile)
 		log.Debug("Local flag", aFlag)
 		core.StartCommand()
 	},
@@ -24,6 +25,7 @@ var aCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(aCmd)
+	log.Println(os.Getenv("B_KEY"))
 
 	// Here you will define your flags and configuration settings.
 

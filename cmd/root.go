@@ -5,9 +5,15 @@ import (
 	"os"
 	"time"
 
-	"github.com/evalphobia/logrus_sentry"
+	// for .env
+	_ "github.com/joho/godotenv/autoload"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/evalphobia/logrus_sentry"
 	"github.com/spf13/cobra"
+
+	"github.com/tzapu/disco-bit/bot"
+	"github.com/tzapu/disco-bit/utils"
 )
 
 var (
@@ -19,11 +25,11 @@ var (
 	sentryDSN string
 	// BuildVersion to show in usage message
 	BuildVersion string
-	// prometheus metrics port
-	metricsPort int
 
 	// other flags
-	cfgFile string
+	key    string
+	secret string
+	token  string
 )
 
 // RootCmd represents the base command when called without any subcommands
@@ -37,8 +43,11 @@ var RootCmd = &cobra.Command{
 			fmt.Printf("%s build: %s", os.Args[0], BuildVersion)
 			os.Exit(0)
 		}
-		fmt.Printf("\n\n")
-		cmd.Usage()
+
+		//exchange.Start(key, secret, token)
+		discord := bot.NewDiscord(token)
+		err := discord.Start()
+		utils.FatalIfError(err)
 	},
 }
 
@@ -54,19 +63,12 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "default.flag.toml", "config file")
 	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Display debug messages")
 	RootCmd.Flags().BoolVar(&version, "version", false, "Display app version and quit")
 
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	//aCmd.Flags().StringVarP(&aFlag, "flag", "f", "default-val", "Help message for flag")
-
 	// ENV variables
 	sentryDSN = os.Getenv("SENTRY_DSN")
+	token = os.Getenv("D_TOKEN")
 }
 
 func setupRemoteLogging() {

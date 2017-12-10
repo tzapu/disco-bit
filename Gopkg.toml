@@ -31,3 +31,19 @@
 [[constraint]]
   name = "github.com/evalphobia/logrus_sentry"
   version = "0.4.2"
+
+[[constraint]]
+  name = "github.com/joho/godotenv"
+  version = "1.2.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/toorop/go-bittrex"
+
+[[constraint]]
+  name = "github.com/davecgh/go-spew"
+  version = "1.1.0"
+
+[[constraint]]
+  name = "github.com/bwmarrin/discordgo"
+  version = "0.17.0"
