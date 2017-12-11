@@ -39,3 +39,4 @@ Thumbs.db
 *.sublime-project
 *.sublime-workspace
 config.gob
+config
