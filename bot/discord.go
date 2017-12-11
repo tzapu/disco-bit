@@ -7,6 +7,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/tzapu/disco-bit/encryption"
+	"github.com/tzapu/disco-bit/exchange"
 	"github.com/tzapu/disco-bit/persistance"
 	"github.com/tzapu/disco-bit/utils"
 
@@ -73,7 +74,9 @@ func (d *Discord) Start() (err error) {
 		}
 		d.Session.ChannelMessageSend(dm.ID, "I have been restarted")
 		d.Session.ChannelMessageSend(dm.ID, "Please send me your password so I can continue sending you notifications")
-		d.states[id].next = SHOULD_USE_PASSWORD
+		d.states[id] = &state{
+			next: SHOULD_USE_PASSWORD,
+		}
 	}
 
 	// Wait for a CTRL-C
@@ -171,20 +174,37 @@ func (d *Discord) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate
 		}
 	case SHOULD_USE_PASSWORD:
 		{
+			pwd := m.Content
+			d.passwords[userID] = &pwd
+			go d.monitor(userID)
 			return
 		}
 	}
 }
 
 func (d *Discord) saveUsers() error {
-	return persistance.Save("config.gob", d.users)
+	return persistance.Save("config/users.gob", d.users)
 }
 
 func (d *Discord) loadUsers() error {
 	//	var q interface{}
-	err := persistance.Load("config.gob", &d.users)
+	err := persistance.Load("config/users.gob", &d.users)
 	//	spew.Dump(q)
 	return err
+}
+
+func (d *Discord) monitor(id string) {
+	p := []byte(*d.passwords[id])
+	kb, err := encryption.Decrypt(p, d.users[id].Key)
+	utils.ErrorIfError(err)
+	sb, err := encryption.Decrypt(p, d.users[id].Secret)
+	utils.ErrorIfError(err)
+	bittrex := exchange.NewBittrex(string(kb), string(sb))
+	bittrex.Start()
+	spew.Dump(bittrex.GetOrderHistory())
+	for {
+
+	}
 }
 
 // NewDiscord returns a new Discord bot

@@ -1,24 +1,26 @@
 package exchange
 
 import (
-	"github.com/tzapu/disco-bit/bot"
+	"github.com/toorop/go-bittrex"
 )
 
-var discord *bot.Discord
+type Bittrex struct {
+	key    string
+	secret string
+	api    *bittrex.Bittrex
+}
 
-func Start(k, s, t string) {
+func (b *Bittrex) Start() {
+	b.api = bittrex.New(b.key, b.secret)
+}
 
-	discord = bot.NewDiscord(t)
-	discord.Start()
+func (b *Bittrex) GetOrderHistory() ([]bittrex.Order, error) {
+	return b.api.GetOrderHistory("all")
+}
 
-	/*
-		// Bittrex client
-		bittrex := bittrex.New(k, s)
-
-		// Get markets
-		orders, err := bittrex.GetOrderHistory("all")
-		utils.FatalIfError(err)
-		spew.Dump(orders)
-	*/
-
+func NewBittrex(k string, s string) *Bittrex {
+	return &Bittrex{
+		key:    k,
+		secret: s,
+	}
 }

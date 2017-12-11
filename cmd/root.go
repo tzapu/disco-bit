@@ -45,6 +45,11 @@ var RootCmd = &cobra.Command{
 		}
 
 		//exchange.Start(key, secret, token)
+		if _, err := os.Stat("config"); os.IsNotExist(err) {
+			err := os.MkdirAll("config", os.ModePerm)
+			utils.FatalIfError(err)
+		}
+
 		discord := bot.NewDiscord(token)
 		err := discord.Start()
 		utils.FatalIfError(err)
