@@ -5,6 +5,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/davecgh/go-spew/spew"
+	"github.com/tzapu/disco-bit/encryption"
+	"github.com/tzapu/disco-bit/persistance"
 	"github.com/tzapu/disco-bit/utils"
 
 	log "github.com/sirupsen/logrus"
@@ -17,23 +20,24 @@ const (
 	GOT_PASSWORD
 	GOT_KEY
 	GOT_SECRET
+	SHOULD_USE_PASSWORD
 )
 
 type user struct {
-	key    string
-	secret string
+	Key    []byte
+	Secret []byte
 }
 
 type state struct {
-	password string
-	next     int
+	next int
 }
 
 // Discord holds the bot
 type Discord struct {
-	Session *discordgo.Session
-	users   map[string]*user
-	states  map[string]*state
+	Session   *discordgo.Session
+	users     map[string]*user
+	states    map[string]*state
+	passwords map[string]*string
 }
 
 func (d *Discord) Start() (err error) {
@@ -53,6 +57,24 @@ func (d *Discord) Start() (err error) {
 
 	// Register the messageCreate func as a callback for MessageCreate events.
 	d.Session.AddHandler(d.messageCreate)
+
+	err = d.loadUsers()
+	if err != nil {
+		log.Error("Can't load users ", err)
+	}
+
+	spew.Dump(d.users)
+
+	for id := range d.users {
+		dm, err := d.Session.UserChannelCreate(id)
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+		d.Session.ChannelMessageSend(dm.ID, "I have been restarted")
+		d.Session.ChannelMessageSend(dm.ID, "Please send me your password so I can continue sending you notifications")
+		d.states[id].next = SHOULD_USE_PASSWORD
+	}
 
 	// Wait for a CTRL-C
 	log.Printf(`Now running. Press CTRL-C to exit.`)
@@ -76,6 +98,10 @@ func (d *Discord) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate
 	c, err := d.Session.State.Channel(m.ChannelID)
 	utils.FatalIfError(err)
 
+	if c.Name != "disco-bit" && c.Type != discordgo.ChannelTypeDM {
+		return
+	}
+
 	// only works on DMs
 	if c.Type != discordgo.ChannelTypeDM {
 		log.Debug("Channel mesage")
@@ -89,16 +115,17 @@ func (d *Discord) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate
 	}
 
 	// ever seen this user before?
-	userID := m.Author.String()
+	userID := m.Author.ID
 	u, ok := d.users[userID]
 	if !ok {
 		log.Debug("We don't know ", userID)
 		u = &user{}
 		d.users[userID] = u
 		d.states[userID] = &state{
-			password: "",
-			next:     NEW_USER,
+			next: NEW_USER,
 		}
+		e := ""
+		d.passwords[userID] = &e
 	}
 	log.Println(u)
 
@@ -112,7 +139,7 @@ func (d *Discord) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate
 	case GOT_PASSWORD:
 		{
 			pwd := m.Content
-			d.states[userID].password = pwd
+			d.passwords[userID] = &pwd
 			d.states[userID].next = GOT_KEY
 			s.ChannelMessageSend(m.ChannelID, "Please provide your Bittrex key")
 			return
@@ -120,7 +147,9 @@ func (d *Discord) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate
 	case GOT_KEY:
 		{
 			key := m.Content
-			d.users[userID].key = key
+			ek, err := encryption.Encrypt([]byte(*d.passwords[userID]), []byte(key))
+			utils.FatalIfError(err)
+			d.users[userID].Key = ek
 			d.states[userID].next = GOT_SECRET
 			s.ChannelMessageSend(m.ChannelID, "Please provide your Bittrex secret")
 			return
@@ -128,14 +157,34 @@ func (d *Discord) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate
 	case GOT_SECRET:
 		{
 			secret := m.Content
-			d.users[userID].secret = secret
+			es, err := encryption.Encrypt([]byte(*d.passwords[userID]), []byte(secret))
+			utils.FatalIfError(err)
+			d.users[userID].Secret = es
+			err = d.saveUsers()
+			utils.FatalIfError(err)
+
 			s.ChannelMessageSend(m.ChannelID, "Your details have been saved")
 			s.ChannelMessageSend(m.ChannelID, "Yoy will be asked for your password everytime the server restarts")
 			s.ChannelMessageSend(m.ChannelID, "Order notification has been started")
+
 			return
 		}
-
+	case SHOULD_USE_PASSWORD:
+		{
+			return
+		}
 	}
+}
+
+func (d *Discord) saveUsers() error {
+	return persistance.Save("config.gob", d.users)
+}
+
+func (d *Discord) loadUsers() error {
+	//	var q interface{}
+	err := persistance.Load("config.gob", &d.users)
+	//	spew.Dump(q)
+	return err
 }
 
 // NewDiscord returns a new Discord bot
@@ -150,8 +199,9 @@ func NewDiscord(token string) *Discord {
 	}
 
 	return &Discord{
-		Session: s,
-		users:   map[string]*user{},
-		states:  map[string]*state{},
+		Session:   s,
+		users:     map[string]*user{},
+		states:    map[string]*state{},
+		passwords: map[string]*string{},
 	}
 }
