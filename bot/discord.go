@@ -1,9 +1,12 @@
 package bot
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/toorop/go-bittrex"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/tzapu/disco-bit/encryption"
@@ -30,7 +33,10 @@ type user struct {
 }
 
 type state struct {
-	next int
+	next    int
+	channel *discordgo.Channel
+	bittrex *exchange.Bittrex
+	orders  map[string]*bittrex.Order
 }
 
 // Discord holds the bot
@@ -39,6 +45,7 @@ type Discord struct {
 	users     map[string]*user
 	states    map[string]*state
 	passwords map[string]*string
+	orders    map[string]*bittrex.Order
 }
 
 func (d *Discord) Start() (err error) {
@@ -75,7 +82,9 @@ func (d *Discord) Start() (err error) {
 		d.Session.ChannelMessageSend(dm.ID, "I have been restarted")
 		d.Session.ChannelMessageSend(dm.ID, "Please send me your password so I can continue sending you notifications")
 		d.states[id] = &state{
-			next: SHOULD_USE_PASSWORD,
+			next:    SHOULD_USE_PASSWORD,
+			channel: dm,
+			orders:  map[string]*bittrex.Order{},
 		}
 	}
 
@@ -187,24 +196,40 @@ func (d *Discord) saveUsers() error {
 }
 
 func (d *Discord) loadUsers() error {
-	//	var q interface{}
 	err := persistance.Load("config/users.gob", &d.users)
-	//	spew.Dump(q)
 	return err
 }
 
 func (d *Discord) monitor(id string) {
+	log.Println("pwd", *d.passwords[id])
 	p := []byte(*d.passwords[id])
 	kb, err := encryption.Decrypt(p, d.users[id].Key)
 	utils.ErrorIfError(err)
 	sb, err := encryption.Decrypt(p, d.users[id].Secret)
 	utils.ErrorIfError(err)
-	bittrex := exchange.NewBittrex(string(kb), string(sb))
-	bittrex.Start()
-	spew.Dump(bittrex.GetOrderHistory())
-	for {
+	d.states[id].bittrex = exchange.NewBittrex(string(kb), string(sb))
+	d.states[id].bittrex.Start()
+	d.populateOrders(id)
 
+}
+
+func (d *Discord) populateOrders(id string) error {
+	orders, err := d.states[id].bittrex.GetOrderHistory()
+	if err != nil {
+		return err
 	}
+	for _, o := range orders {
+		d.states[id].orders[o.OrderUuid] = &o
+	}
+	last := &orders[0]
+	d.sendOrder(id, last)
+	return nil
+}
+
+func (d *Discord) sendOrder(id string, order *bittrex.Order) error {
+	t := fmt.Sprintf("%s: %s %s %s for %s", order.TimeStamp, order.Exchange, order.OrderType, order.Quantity, order.Price)
+	_, err := d.Session.ChannelMessageSend(d.states[id].channel.ID, t)
+	return err
 }
 
 // NewDiscord returns a new Discord bot
