@@ -5,7 +5,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/tzapu/disco-bit/encryption"
 	"github.com/tzapu/disco-bit/exchange"
 	"github.com/tzapu/disco-bit/persistance"
@@ -66,8 +65,6 @@ func (d *Discord) Start() (err error) {
 	if err != nil {
 		log.Error("Can't load users ", err)
 	}
-
-	spew.Dump(d.users)
 
 	for id := range d.users {
 		dm, err := d.Session.UserChannelCreate(id)
@@ -132,7 +129,8 @@ func (d *Discord) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate
 		u = &user{}
 		d.users[userID] = u
 		d.states[userID] = &state{
-			next: NEW_USER,
+			next:    NEW_USER,
+			channel: c,
 		}
 		e := ""
 		d.passwords[userID] = &e
@@ -201,7 +199,6 @@ func (d *Discord) loadUsers() error {
 }
 
 func (d *Discord) monitor(id string) {
-	log.Println("pwd", *d.passwords[id])
 	p := []byte(*d.passwords[id])
 	kb, err := encryption.Decrypt(p, d.users[id].Key)
 	utils.ErrorIfError(err)
