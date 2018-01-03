@@ -177,6 +177,8 @@ func (d *Discord) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate
 			s.ChannelMessageSend(m.ChannelID, "Yoy will be asked for your password everytime the server restarts")
 			s.ChannelMessageSend(m.ChannelID, "Order notification has been started")
 
+			d.monitor(userID)
+
 			return
 		}
 	case SHOULD_USE_PASSWORD:
