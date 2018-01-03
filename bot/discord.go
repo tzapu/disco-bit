@@ -1,12 +1,9 @@
 package bot
 
 import (
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
-
-	"github.com/toorop/go-bittrex"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/tzapu/disco-bit/encryption"
@@ -36,7 +33,6 @@ type state struct {
 	next    int
 	channel *discordgo.Channel
 	bittrex *exchange.Bittrex
-	orders  map[string]*bittrex.Order
 }
 
 // Discord holds the bot
@@ -45,7 +41,7 @@ type Discord struct {
 	users     map[string]*user
 	states    map[string]*state
 	passwords map[string]*string
-	orders    map[string]*bittrex.Order
+	receiver  chan utils.Message
 }
 
 func (d *Discord) Start() (err error) {
@@ -84,9 +80,10 @@ func (d *Discord) Start() (err error) {
 		d.states[id] = &state{
 			next:    SHOULD_USE_PASSWORD,
 			channel: dm,
-			orders:  map[string]*bittrex.Order{},
 		}
 	}
+
+	go d.receive()
 
 	// Wait for a CTRL-C
 	log.Printf(`Now running. Press CTRL-C to exit.`)
@@ -95,6 +92,7 @@ func (d *Discord) Start() (err error) {
 	<-sc
 
 	// Clean up
+	close(d.receiver)
 	d.Session.Close()
 
 	return nil
@@ -185,7 +183,7 @@ func (d *Discord) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate
 		{
 			pwd := m.Content
 			d.passwords[userID] = &pwd
-			go d.monitor(userID)
+			d.monitor(userID)
 			return
 		}
 	}
@@ -207,29 +205,16 @@ func (d *Discord) monitor(id string) {
 	utils.ErrorIfError(err)
 	sb, err := encryption.Decrypt(p, d.users[id].Secret)
 	utils.ErrorIfError(err)
-	d.states[id].bittrex = exchange.NewBittrex(string(kb), string(sb))
+	d.states[id].bittrex = exchange.NewBittrex(string(kb), string(sb), id, d.receiver)
 	d.states[id].bittrex.Start()
-	d.populateOrders(id)
-
 }
 
-func (d *Discord) populateOrders(id string) error {
-	orders, err := d.states[id].bittrex.GetOrderHistory()
-	if err != nil {
-		return err
+func (d *Discord) receive() {
+	for m := range d.receiver {
+		log.Println(m)
+		_, err := d.Session.ChannelMessageSend(d.states[m.ID].channel.ID, m.Text)
+		utils.FatalIfError(err)
 	}
-	for _, o := range orders {
-		d.states[id].orders[o.OrderUuid] = &o
-	}
-	last := &orders[0]
-	d.sendOrder(id, last)
-	return nil
-}
-
-func (d *Discord) sendOrder(id string, order *bittrex.Order) error {
-	t := fmt.Sprintf("%s: %s %s %s for %s", order.TimeStamp, order.Exchange, order.OrderType, order.Quantity, order.Price)
-	_, err := d.Session.ChannelMessageSend(d.states[id].channel.ID, t)
-	return err
 }
 
 // NewDiscord returns a new Discord bot
@@ -248,5 +233,6 @@ func NewDiscord(token string) *Discord {
 		users:     map[string]*user{},
 		states:    map[string]*state{},
 		passwords: map[string]*string{},
+		receiver:  make(chan utils.Message),
 	}
 }
