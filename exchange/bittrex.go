@@ -26,12 +26,17 @@ func (b *Bittrex) Start() {
 	if b.last != "" {
 		order := *b.orders[b.last]
 		log.Println(order, b.last)
-		h := "Your last order:\n"
-		t := fmt.Sprintf(`%s%s: %s %s %s for %s`, h, order.TimeStamp, order.Exchange, order.OrderType, order.Quantity, order.Price)
+		h := "**Your last order**"
+		b.send(h)
+		t := b.formatOrderMessage(&order)
 		b.send(t)
 	}
 
 	go b.monitor()
+}
+
+func (b *Bittrex) formatOrderMessage(order *bittrex.Order) string {
+	return fmt.Sprintf(`%s %s %s %s * %s = %s`, order.TimeStamp, order.OrderType, order.Exchange, order.Quantity, order.PricePerUnit, order.Price)
 }
 
 func (b *Bittrex) send(t string) {

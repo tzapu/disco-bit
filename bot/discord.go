@@ -89,7 +89,6 @@ func (d *Discord) Start() (err error) {
 	<-sc
 
 	// Clean up
-	close(d.receiver)
 	d.Session.Close()
 
 	return nil
@@ -116,8 +115,6 @@ func (d *Discord) messageCreate(s *discordgo.Session, m *discordgo.MessageCreate
 		dm, err := s.UserChannelCreate(m.Author.ID)
 		utils.FatalIfError(err)
 		s.ChannelMessageSend(dm.ID, "You can talk to me here")
-		//		s.ChannelMessageSend(dm.ID, "I need a password. This will be used to encrypt your key/secret. It will not be save anywhere so please remember it.")
-		//		d.states[m.Author.String()].next = GOT_PASSWORD
 		return
 	}
 
