@@ -60,7 +60,7 @@ func (b *Bittrex) monitor() {
 				continue
 			}
 			b.orders[o.OrderUuid] = &o
-			t := fmt.Sprintf(`%s: %s %s %s for %s`, o.TimeStamp, o.Exchange, o.OrderType, o.Quantity, o.Price)
+			t := b.formatOrderMessage(&o)
 			b.send(t)
 		}
 		b.last = orders[0].OrderUuid
