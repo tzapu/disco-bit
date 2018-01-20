@@ -2,7 +2,10 @@ package exchange
 
 import (
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/shopspring/decimal"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/tzapu/disco-bit/utils"
@@ -28,15 +31,39 @@ func (b *Bittrex) Start() {
 		log.Println(order, b.last)
 		h := "**Your last order**"
 		b.send(h)
-		t := b.formatOrderMessage(&order)
+		p := b.getProfit(order.Exchange, order.PricePerUnit)
+		t := b.formatOrderMessage(&order, p)
 		b.send(t)
 	}
 
 	go b.monitor()
 }
 
-func (b *Bittrex) formatOrderMessage(order *bittrex.Order) string {
-	return fmt.Sprintf(`%s %s %s * %sbtc = %s (%s)`, order.Exchange, order.OrderType, order.Quantity, order.PricePerUnit, order.Price, order.TimeStamp)
+func (b *Bittrex) getProfit(pair string, price decimal.Decimal) string {
+	for _, o := range b.orders {
+		if o.Exchange == pair && strings.Contains(o.OrderType, "_BUY") {
+			log.Debug("found order", o)
+			h, _ := decimal.NewFromString("100")
+			return o.PricePerUnit.Mul(h).Div(price).String()
+		}
+	}
+	return "0"
+}
+
+func (b *Bittrex) formatOrderMessage(order *bittrex.Order, profit string) string {
+	p := ""
+	if profit != "0" && strings.Contains(order.OrderType, "_SELL") {
+		p = fmt.Sprintf("%s%%", profit)
+	}
+	return fmt.Sprintf(
+		`%s %s %s * %sbtc = %s %s(%s)`,
+		order.Exchange,
+		order.OrderType,
+		order.Quantity,
+		order.PricePerUnit,
+		order.Price,
+		p, order.TimeStamp,
+	)
 }
 
 func (b *Bittrex) send(t string) {
@@ -60,7 +87,8 @@ func (b *Bittrex) monitor() {
 				continue
 			}
 			b.orders[o.OrderUuid] = &o
-			t := b.formatOrderMessage(&o)
+			p := b.getProfit(o.Exchange, o.PricePerUnit)
+			t := b.formatOrderMessage(&o, p)
 			b.send(t)
 		}
 		b.last = orders[0].OrderUuid
