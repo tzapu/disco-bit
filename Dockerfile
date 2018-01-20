@@ -9,6 +9,8 @@ RUN mkdir /go/src/app
 ADD . /go/src/app
 WORKDIR /go/src/app
 
+RUN git rev-parse --short HEAD
+
 # Go dep!
 RUN go get -u github.com/golang/dep/...
 RUN dep ensure
