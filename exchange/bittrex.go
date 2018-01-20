@@ -36,7 +36,7 @@ func (b *Bittrex) Start() {
 }
 
 func (b *Bittrex) formatOrderMessage(order *bittrex.Order) string {
-	return fmt.Sprintf(`%s %s %s %s * %s = %s`, order.TimeStamp, order.OrderType, order.Exchange, order.Quantity, order.PricePerUnit, order.Price)
+	return fmt.Sprintf(`%s %s %s * %sbtc = %s (%s)`, order.Exchange, order.OrderType, order.Quantity, order.PricePerUnit, order.Price, order.TimeStamp)
 }
 
 func (b *Bittrex) send(t string) {
