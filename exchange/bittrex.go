@@ -14,25 +14,25 @@ import (
 )
 
 type Bittrex struct {
-	key    string
-	secret string
-	id     string
-	api    *bittrex.Bittrex
-	orders map[string]*bittrex.Order
-	last   string
-	sender chan<- utils.Message
+	key      string
+	secret   string
+	id       string
+	api      *bittrex.Bittrex
+	orders   map[string]*bittrex.Order
+	orderIds []string
+	sender   chan<- utils.Message
 }
 
 func (b *Bittrex) Start() {
 	b.api = bittrex.New(b.key, b.secret)
 	b.populateOrders()
-	if b.last != "" {
-		order := *b.orders[b.last]
-		log.Println(order, b.last)
+	if len(b.orderIds) > 0 {
+		o := b.orders[b.orderIds[len(b.orderIds)-1]]
+		log.Println(o, o)
 		h := "**Your last order**"
 		b.send(h)
-		p := b.getProfit(order.Exchange, order.PricePerUnit)
-		t := b.formatOrderMessage(&order, p)
+		p := b.getProfit(o.Exchange, o.Price)
+		t := b.formatOrderMessage(o, p)
 		b.send(t)
 	}
 
@@ -40,11 +40,13 @@ func (b *Bittrex) Start() {
 }
 
 func (b *Bittrex) getProfit(pair string, price decimal.Decimal) string {
-	for _, o := range b.orders {
+	for i := len(b.orderIds) - 1; i >= 0; i-- {
+		o := b.orders[b.orderIds[i]]
 		if o.Exchange == pair && strings.Contains(o.OrderType, "_BUY") {
 			log.Debug("found order", o)
 			h, _ := decimal.NewFromString("100")
-			return o.PricePerUnit.Mul(h).Div(price).String()
+			//return o.Price.Mul(h).Div(price).StringFixed(2)
+			return price.Mul(h).Div(o.Price).StringFixed(2)
 		}
 	}
 	return "0"
@@ -53,7 +55,7 @@ func (b *Bittrex) getProfit(pair string, price decimal.Decimal) string {
 func (b *Bittrex) formatOrderMessage(order *bittrex.Order, profit string) string {
 	p := ""
 	if profit != "0" && strings.Contains(order.OrderType, "_SELL") {
-		p = fmt.Sprintf("%s%%", profit)
+		p = fmt.Sprintf("**%s%%**", profit)
 	}
 	return fmt.Sprintf(
 		`%s %s %s * %sbtc = %s %s(%s)`,
@@ -76,22 +78,34 @@ func (b *Bittrex) send(t string) {
 
 func (b *Bittrex) monitor() {
 	for _ = range time.Tick(time.Second * 30) {
+		lastId := ""
+		if len(b.orderIds) > 0 {
+			lastId = b.orderIds[len(b.orderIds)-1]
+		}
 		orders, err := b.GetOrderHistory()
 		if err != nil {
 			log.Error(err)
 			continue
 		}
+
+		var toAdd []*bittrex.Order
 		for i := range orders {
 			o := orders[i]
-			if _, ok := b.orders[o.OrderUuid]; ok {
-				continue
+			if o.OrderUuid == lastId {
+				break
 			}
-			b.orders[o.OrderUuid] = &o
-			p := b.getProfit(o.Exchange, o.PricePerUnit)
-			t := b.formatOrderMessage(&o, p)
-			b.send(t)
+			toAdd = append([]*bittrex.Order{&o}, toAdd...)
 		}
-		b.last = orders[0].OrderUuid
+		if len(toAdd) > 0 {
+			for i := range toAdd {
+				o := toAdd[i]
+				b.orders[o.OrderUuid] = o
+				b.orderIds = append(b.orderIds, o.OrderUuid)
+				p := b.getProfit(o.Exchange, o.PricePerUnit)
+				t := b.formatOrderMessage(o, p)
+				b.send(t)
+			}
+		}
 	}
 }
 
@@ -100,12 +114,11 @@ func (b *Bittrex) populateOrders() error {
 	if err != nil {
 		return err
 	}
-	for i := range orders {
+
+	for i := len(orders) - 1; i >= 0; i-- {
 		o := orders[i]
 		b.orders[o.OrderUuid] = &o
-	}
-	if len(orders) > 0 {
-		b.last = orders[0].OrderUuid
+		b.orderIds = append(b.orderIds, o.OrderUuid)
 	}
 	return nil
 }
@@ -116,11 +129,11 @@ func (b *Bittrex) GetOrderHistory() ([]bittrex.Order, error) {
 
 func NewBittrex(key, secret, id string, sender chan<- utils.Message) *Bittrex {
 	return &Bittrex{
-		key:    key,
-		secret: secret,
-		id:     id,
-		orders: map[string]*bittrex.Order{},
-		last:   "",
-		sender: sender,
+		key:      key,
+		secret:   secret,
+		id:       id,
+		orders:   map[string]*bittrex.Order{},
+		orderIds: []string{},
+		sender:   sender,
 	}
 }
