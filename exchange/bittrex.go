@@ -32,7 +32,8 @@ func (b *Bittrex) Start() {
 		h := "**Your last order**"
 		b.send(h)
 		p := b.getProfit(o.Exchange, o.Price)
-		t := b.formatOrderMessage(o, p)
+		pu := b.getProfitPerUnit(o.Exchange, o.PricePerUnit)
+		t := b.formatOrderMessage(o, p, pu)
 		b.send(t)
 	}
 
@@ -52,10 +53,23 @@ func (b *Bittrex) getProfit(pair string, price decimal.Decimal) string {
 	return "0"
 }
 
-func (b *Bittrex) formatOrderMessage(order *bittrex.Order, profit string) string {
+func (b *Bittrex) getProfitPerUnit(pair string, price decimal.Decimal) string {
+	for i := len(b.orderIds) - 1; i >= 0; i-- {
+		o := b.orders[b.orderIds[i]]
+		if o.Exchange == pair && strings.Contains(o.OrderType, "_BUY") {
+			log.Debug("found order", o)
+			h, _ := decimal.NewFromString("100")
+			//return o.Price.Mul(h).Div(price).StringFixed(2)
+			return price.Mul(h).Div(o.PricePerUnit).StringFixed(2)
+		}
+	}
+	return "0"
+}
+
+func (b *Bittrex) formatOrderMessage(order *bittrex.Order, profit string, profitPerUnit string) string {
 	p := ""
 	if profit != "0" && strings.Contains(order.OrderType, "_SELL") {
-		p = fmt.Sprintf("**%s%%**", profit)
+		p = fmt.Sprintf("**%s%%** **%s%%**", profit, profitPerUnit)
 	}
 	return fmt.Sprintf(
 		`%s %s %s * %sbtc = %s %s(%s)`,
@@ -101,8 +115,9 @@ func (b *Bittrex) monitor() {
 				o := toAdd[i]
 				b.orders[o.OrderUuid] = o
 				b.orderIds = append(b.orderIds, o.OrderUuid)
-				p := b.getProfit(o.Exchange, o.PricePerUnit)
-				t := b.formatOrderMessage(o, p)
+				p := b.getProfit(o.Exchange, o.Price)
+				pu := b.getProfitPerUnit(o.Exchange, o.PricePerUnit)
+				t := b.formatOrderMessage(o, p, pu)
 				b.send(t)
 			}
 		}
