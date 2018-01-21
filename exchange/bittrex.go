@@ -69,16 +69,17 @@ func (b *Bittrex) getProfitPerUnit(pair string, price decimal.Decimal) string {
 func (b *Bittrex) formatOrderMessage(order *bittrex.Order, profit string, profitPerUnit string) string {
 	p := ""
 	if profit != "0" && strings.Contains(order.OrderType, "_SELL") {
-		p = fmt.Sprintf("**%s%%** **%s%%**", profit, profitPerUnit)
+		p = fmt.Sprintf("\n**%s%%** **%s%%** ", profit, profitPerUnit)
 	}
 	return fmt.Sprintf(
-		`%s %s %s * %sbtc = %s %s(%s)`,
+		"**%s**\n%s %s * %sbtc = %s%s@ %s",
 		order.Exchange,
 		order.OrderType,
 		order.Quantity,
 		order.PricePerUnit,
 		order.Price,
-		p, order.TimeStamp,
+		p,
+		order.TimeStamp.Format("15:04 MST 02 Jan"),
 	)
 }
 
